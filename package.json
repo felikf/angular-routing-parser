@@ -1,0 +1,26 @@
+{
+  "name": "angular-routing-parser",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "bin": {
+    "parse-routes": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "minimist": "^1.2.8",
+    "ts-morph": "^25.0.1",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/minimist": "^1.2.5",
+    "@types/node": "^22.15.30"
+
+  }
+}
