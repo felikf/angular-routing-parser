@@ -223,7 +223,6 @@ class RouteDirector {
   }
 
   private extractModuleFilePath(loadChildrenText: string): string | undefined {
-    // allow import(...) across newlines
     const m = /import\(\s*['"`]([\s\S]*?)['"`]\s*\)/.exec(loadChildrenText);
     return m?.[1];
   }
@@ -299,6 +298,18 @@ class RouteDirector {
 }
 
 // --------------------
+// NOVÁ pomocná funkce pro formátování path
+// --------------------
+function formatRoutePath(p: string): string {
+  if (!p) return '';
+  if (p.includes('.')) {
+    const afterDot = p.split('.').pop()!;
+    return afterDot.toLowerCase().replace(/_/g, '-');
+  }
+  return p.toLowerCase().replace(/_/g, '-');
+}
+
+// --------------------
 // Generátor finálního textového výpisu
 // --------------------
 function generateTreeText(nodes: RouteNode[], prefix = ''): string {
@@ -306,8 +317,9 @@ function generateTreeText(nodes: RouteNode[], prefix = ''): string {
   nodes.forEach((n, i) => {
     const last = i === nodes.length - 1;
     const ptr = last ? '└─ ' : '├─ ';
+    const formattedPath = formatRoutePath(n.path);
     const titlePart = n.type === 'eager' || n.type === 'lazy-component' ? ` (title=${n.title ?? 'NOT FOUND'})` : '';
-    out += `${prefix}${ptr}/${n.path} ${n.name} [${n.type}]${titlePart}\n`;
+    out += `${prefix}${ptr}${formattedPath} ${n.name} [${n.type}]${titlePart}\n`;
     if (n.children?.length) {
       out += generateTreeText(n.children, prefix + (last ? '   ' : '│  '));
     }
