@@ -1,7 +1,14 @@
 // src/index.ts
 import * as fs from 'fs';
 import * as path from 'path';
-import { Project, SyntaxKind, ObjectLiteralExpression, Node, SourceFile, VariableDeclaration } from 'ts-morph';
+import {
+  Project,
+  SyntaxKind,
+  ObjectLiteralExpression,
+  Node,
+  SourceFile,
+  VariableDeclaration
+} from 'ts-morph';
 
 // --------------------
 // Model uzlu routy
@@ -122,7 +129,8 @@ class RouteParser {
     return undefined;
   }
 
-  extractLazyComponentInfo(loadComponentText: string): { alias: string; componentName: string } | undefined {
+  extractLazyComponentInfo(loadComponentText: string):
+    { alias: string; componentName: string } | undefined {
     const imp = /import\(\s*['"`]([\s\S]*?)['"`]\s*\)/.exec(loadComponentText);
     const thenM = /\.then\(\s*\w+\s*=>\s*\w+\.(\w+)\)/.exec(loadComponentText);
     if (imp && imp[1] && thenM && thenM[1]) {
@@ -151,10 +159,7 @@ class RouteParser {
 // --------------------
 class RouteDirector {
   tsconfigPaths: any;
-  constructor(
-    public project: Project,
-    public parser: RouteParser
-  ) {
+  constructor(public project: Project, public parser: RouteParser) {
     this.tsconfigPaths = this.loadTsconfigPaths();
   }
 
@@ -171,10 +176,22 @@ class RouteDirector {
     const entry = 'apps/funsel/src/app/app-routing.module.ts';
     console.log(`🛠️  Starting root routing: ${entry}`);
     const objs = this.parser.parseRoutingFile(entry);
-    return objs.map(o => this.handleRoute(this.parser.parseRouteObject(o), '', 0, entry));
+    return objs.map(o =>
+      this.handleRoute(
+        this.parser.parseRouteObject(o),
+        '',
+        0,
+        entry
+      )
+    );
   }
 
-  private handleRoute(route: any, parentPath: string, depth: number, currentFile: string): RouteNode {
+  private handleRoute(
+    route: any,
+    parentPath: string,
+    depth: number,
+    currentFile: string
+  ): RouteNode {
     const indent = '  '.repeat(depth);
     const fullPath = `${parentPath}/${route.path || ''}`;
 
@@ -182,7 +199,9 @@ class RouteDirector {
     if (route.type === 'eager' && route.component) {
       const title = this.parser.getComponentTitle(route.component) ?? 'NOT FOUND';
       console.log(`${indent}✅ EAGER ${fullPath}, comp='${route.component}', title='${title}'`);
-      const children = (route.children || []).map((c: any) => this.handleRoute(c, fullPath, depth + 1, currentFile));
+      const children = (route.children || []).map((c: any) =>
+        this.handleRoute(c, fullPath, depth + 1, currentFile)
+      );
       return { path: route.path, type: 'eager', name: route.component, title, children };
     }
 
@@ -206,7 +225,9 @@ class RouteDirector {
       const info = this.parser.extractLazyComponentInfo(route.loadComponent)!;
       const title = this.parser.getComponentTitle(info.componentName) ?? 'NOT FOUND';
       console.log(`${indent}🚀 LAZY-COMP ${fullPath}, comp='${info.componentName}', title='${title}'`);
-      const children = (route.children || []).map((c: any) => this.handleRoute(c, fullPath, depth + 1, currentFile));
+      const children = (route.children || []).map((c: any) =>
+        this.handleRoute(c, fullPath, depth + 1, currentFile)
+      );
       return {
         path: route.path,
         type: 'lazy-component',
@@ -218,7 +239,9 @@ class RouteDirector {
 
     // UNKNOWN
     console.log(`${indent}❓ UNKNOWN ROUTE TYPE ${fullPath}`);
-    const children = (route.children || []).map((c: any) => this.handleRoute(c, fullPath, depth + 1, currentFile));
+    const children = (route.children || []).map((c: any) =>
+      this.handleRoute(c, fullPath, depth + 1, currentFile)
+    );
     return { path: route.path, type: 'eager', name: 'Unknown', children };
   }
 
@@ -239,7 +262,12 @@ class RouteDirector {
     return this.findAndParseRoutingFiles(baseDir, parentPath, depth);
   }
 
-  private processRelativeModule(relPath: string, parentPath: string, depth: number, currentFile: string): RouteNode[] {
+  private processRelativeModule(
+    relPath: string,
+    parentPath: string,
+    depth: number,
+    currentFile: string
+  ): RouteNode[] {
     const indent = '  '.repeat(depth);
     const dir = path.dirname(currentFile);
     const moduleFile = path.resolve(dir, relPath) + '.ts';
@@ -253,13 +281,17 @@ class RouteDirector {
     return this.findAndParseRoutingFiles(baseDir, parentPath, depth);
   }
 
-  private findAndParseRoutingFiles(baseDir: string, parentPath: string, depth: number): RouteNode[] {
+  private findAndParseRoutingFiles(
+    baseDir: string,
+    parentPath: string,
+    depth: number
+  ): RouteNode[] {
     const indent = '  '.repeat(depth);
     const patterns = [
       `${baseDir}/*-routing.module.ts`,
       `${baseDir}/*.routes.ts`,
       `${baseDir}/lib/*-routing.module.ts`,
-      `${baseDir}/lib/*.routes.ts`
+      `${baseDir}/lib/*.routes.ts`,
     ];
 
     let files: SourceFile[] = [];
@@ -290,7 +322,12 @@ class RouteDirector {
       console.log(`${indent}➡️ Parsing routing file: ${rf.getFilePath()}`);
       const objs = this.parser.parseRoutingFile(rf.getFilePath());
       for (const o of objs) {
-        result.push(this.handleRoute(this.parser.parseRouteObject(o), parentPath, depth + 1, rf.getFilePath()));
+        result.push(this.handleRoute(
+          this.parser.parseRouteObject(o),
+          parentPath,
+          depth + 1,
+          rf.getFilePath()
+        ));
       }
     }
     return result;
@@ -298,7 +335,7 @@ class RouteDirector {
 }
 
 // --------------------
-// NOVÁ pomocná funkce pro formátování path
+// Pomocná funkce pro formátování path
 // --------------------
 function formatRoutePath(p: string): string {
   if (!p) return '';
@@ -318,13 +355,52 @@ function generateTreeText(nodes: RouteNode[], prefix = ''): string {
     const last = i === nodes.length - 1;
     const ptr = last ? '└─ ' : '├─ ';
     const formattedPath = formatRoutePath(n.path);
-    const titlePart = n.type === 'eager' || n.type === 'lazy-component' ? ` (title=${n.title ?? 'NOT FOUND'})` : '';
+    const titlePart = (n.type === 'eager' || n.type === 'lazy-component')
+      ? ` (title=${n.title ?? 'NOT FOUND'})`
+      : '';
     out += `${prefix}${ptr}${formattedPath} ${n.name} [${n.type}]${titlePart}\n`;
     if (n.children?.length) {
       out += generateTreeText(n.children, prefix + (last ? '   ' : '│  '));
     }
   });
   return out;
+}
+
+// --------------------
+// Nový builder: Markdown tabulka
+// --------------------
+interface TableRow { path: string; name: string; title: string; }
+
+function flattenComponents(nodes: RouteNode[], parentSegments: string[] = []): TableRow[] {
+  let rows: TableRow[] = [];
+  nodes.forEach(n => {
+    const segments = parentSegments.concat(n.path || '');
+    if (n.type === 'eager' || n.type === 'lazy-component') {
+      const formatted = segments
+        .filter(s => s)
+        .map(formatRoutePath)
+        .join('/');
+      rows.push({
+        path: formatted,
+        name: n.name,
+        title: n.title ?? 'NOT FOUND'
+      });
+    }
+    if (n.children) {
+      rows = rows.concat(flattenComponents(n.children, segments));
+    }
+  });
+  return rows;
+}
+
+function generateMarkdownTable(nodes: RouteNode[]): string {
+  const rows = flattenComponents(nodes);
+  const header = `| Path | Component | Title |
+| --- | --- | --- |`;
+  const lines = rows.map(r =>
+    `| ${r.path} | ${r.name} | ${r.title} |`
+  );
+  return [header, ...lines].join('\n');
 }
 
 // --------------------
@@ -340,3 +416,7 @@ const tree = director.processRoutingModules();
 
 console.log('\n📋 Generated route tree:\n');
 console.log(generateTreeText(tree));
+
+// nový Markdown výstup
+console.log('\n📊 Markdown table of components:\n');
+console.log(generateMarkdownTable(tree));
