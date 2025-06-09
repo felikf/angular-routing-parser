@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { Project, SyntaxKind, ObjectLiteralExpression, Node, SourceFile, VariableDeclaration } from 'ts-morph';
 
 // --------------------
-// Data model
+// Datový model
 // --------------------
 interface RouteNode {
   path: string;
@@ -14,7 +14,7 @@ interface RouteNode {
 }
 
 // --------------------
-// Parser – načítá routing soubory a komponenty
+// Parser
 // --------------------
 class RouteParser {
   constructor(public project: Project) {}
@@ -83,9 +83,15 @@ class RouteParser {
   }
 
   getComponentTitle(componentName: string): string | undefined {
+    let foundClass = false;
     for (const sf of this.project.getSourceFiles()) {
       const cls = sf.getClass(componentName);
       if (!cls) continue;
+      foundClass = true;
+      console.log(`[getComponentTitle] Found class ${componentName} in file ${sf.getFilePath()}`);
+      const decs = cls.getDecorators().map(d => d.getName());
+      console.log(`[getComponentTitle] Decorators on ${componentName}: ${decs.join(', ')}`);
+
       for (const dec of cls.getDecorators()) {
         if (dec.getName() === 'FunselPage') {
           const arg = dec.getArguments()[0];
@@ -94,20 +100,39 @@ class RouteParser {
             const tp = obj.getProperty('title');
             if (tp?.getKind() === SyntaxKind.PropertyAssignment) {
               const init = (tp as any).getInitializer();
-              if (!init) return undefined;
+              const kindName = SyntaxKind[init.getKind()];
+              console.log(`[getComponentTitle] Found @FunselPage.title initializer of kind ${kindName}`);
+              // 1) string literal
               if (init.getKind() === SyntaxKind.StringLiteral) {
                 return init.getText().replace(/['"`]/g, '');
               }
+              // 2) template literal without expressions
+              if (init.getKind() === SyntaxKind.NoSubstitutionTemplateLiteral) {
+                return init.getText().replace(/[`]/g, '');
+              }
+              // 3) general template expression
+              if (init.getKind() === SyntaxKind.TemplateExpression) {
+                // v jednoduchých případech bez výrazů vezmeme raw text
+                return init.getText().replace(/[`]/g, '');
+              }
+              // 4) identifier → konstantu resolve
               if (init.getKind() === SyntaxKind.Identifier) {
                 const constName = init.getText();
                 const resolved = this.resolveConstant(constName);
                 console.log(`🔗 Resolved constant ${constName} => '${resolved}'`);
                 return resolved;
               }
+              console.warn(`[getComponentTitle] Unsupported initializer kind for title: ${kindName}`);
+            } else {
+              console.log(`[getComponentTitle] No title property assignment found in @FunselPage of ${componentName}`);
             }
           }
         }
       }
+      console.log(`[getComponentTitle] @FunselPage decorator not found or no title for class ${componentName}`);
+    }
+    if (!foundClass) {
+      console.warn(`[getComponentTitle] Class ${componentName} not found in any source file`);
     }
     return undefined;
   }
@@ -137,11 +162,10 @@ class RouteParser {
 }
 
 // --------------------
-// Director – řídí rekurzivní stav a build
+// Director + debug logy s indentací dle hloubky
 // --------------------
 class RouteDirector {
   tsconfigPaths: any;
-
   constructor(
     public project: Project,
     public parser: RouteParser
@@ -162,27 +186,27 @@ class RouteDirector {
     const root = 'apps/funsel/src/app/app-routing.module.ts';
     console.log(`🛠️  Starting root: ${root}`);
     const objs = this.parser.parseRoutingFile(root);
-    return objs.map(obj => this.handleRoute(this.parser.parseRouteObject(obj), '', 0));
+    return objs.map(o => this.handleRoute(this.parser.parseRouteObject(o), '', 0));
   }
 
   private handleRoute(route: any, parentPath: string, depth: number): RouteNode {
     const indent = '  '.repeat(depth);
     const fullPath = `${parentPath}/${route.path || ''}`;
-    // eager
+    // EAGER
     if (route.type === 'eager' && route.component) {
       const title = this.parser.getComponentTitle(route.component) ?? 'NOT FOUND';
       console.log(`${indent}✅ EAGER ROUTE ${fullPath}, component='${route.component}', title='${title}'`);
       const children = (route.children || []).map((c: any) => this.handleRoute(c, fullPath, depth + 1));
       return { path: route.path, type: 'eager', name: route.component, title, children };
     }
-    // lazy-module
+    // LAZY MODULE
     if (route.type === 'lazy-module' && route.loadChildren) {
       const alias = this.extractModuleFilePath(route.loadChildren) || 'UNKNOWN';
       console.log(`${indent}📦 LAZY MODULE ${fullPath}, import='${alias}'`);
       const children = alias ? this.processLazyModule(alias, fullPath, depth + 1) : [];
       return { path: route.path, type: 'lazy-module', name: alias, children };
     }
-    // lazy-component
+    // LAZY COMPONENT
     if (route.type === 'lazy-component' && route.loadComponent) {
       const info = this.parser.extractLazyComponentInfo(route.loadComponent)!;
       const title = this.parser.getComponentTitle(info.componentName) ?? 'NOT FOUND';
@@ -196,7 +220,7 @@ class RouteDirector {
         children
       };
     }
-    // fallback unknown
+    // UNKNOWN
     console.log(`${indent}❓ UNKNOWN ROUTE TYPE ${fullPath}`);
     const children = (route.children || []).map((c: any) => this.handleRoute(c, fullPath, depth + 1));
     return { path: route.path, type: 'eager', name: 'Unknown', children };
@@ -239,18 +263,20 @@ class RouteDirector {
 }
 
 // --------------------
-// Generátor finálního výpisu
+// Finální textový výpis
 // --------------------
 function generateTreeText(nodes: RouteNode[], prefix = ''): string {
   let out = '';
   nodes.forEach((n, i) => {
-    const isLast = i === nodes.length - 1;
-    const pointer = isLast ? '└─ ' : '├─ ';
-    // always show title for eager & lazy-component
-    const titlePart = n.type === 'eager' || n.type === 'lazy-component' ? ` (title=${n.title ?? 'NOT FOUND'})` : '';
-    out += `${prefix}${pointer}/${n.path} ${n.name} [${n.type}]${titlePart}\n`;
+    const last = i === nodes.length - 1;
+    const ptr = last ? '└─ ' : '├─ ';
+    let titlePart = '';
+    if (n.type === 'eager' || n.type === 'lazy-component') {
+      titlePart = ` (title=${n.title ?? 'NOT FOUND'})`;
+    }
+    out += `${prefix}${ptr}/${n.path} ${n.name} [${n.type}]${titlePart}\n`;
     if (n.children?.length) {
-      out += generateTreeText(n.children, prefix + (isLast ? '   ' : '│  '));
+      out += generateTreeText(n.children, prefix + (last ? '   ' : '│  '));
     }
   });
   return out;
